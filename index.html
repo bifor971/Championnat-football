@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Championnat Rouges vs Blancs 2026</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Firebase -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+    
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script>
+        // Configuration Firebase
+        const firebaseConfig = {
+            apiKey: "AIzaSyD26jNyvIzWYNwfS97N27iZES-AFWVtIGc",
+            authDomain: "championnat-football.firebaseapp.com",
+            projectId: "championnat-football",
+            storageBucket: "championnat-football.firebasestorage.app",
+            messagingSenderId: "271329092716",
+            appId: "1:271329092716:web:68e7ff9e0527f489c36449"
+        };
+
+        // Initialiser Firebase
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+    </script>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        // Icônes
+        const Trophy = () => <span>🏆</span>;
+        const Calendar = () => <span>📅</span>;
+        const Target = () => <span>🎯</span>;
+        const TrendingUp = () => <span>📈</span>;
+        const Users = () => <span>👥</span>;
+        const Settings = () => <span>⚙️</span>;
+        const Eye = () => <span>👁️</span>;
+        const Plus = () => <span>➕</span>;
+        const X = () => <span>❌</span>;
+
+        const ChampionshipApp = () => {
+            const [view, setView] = useState('visitor');
+            const [matches, setMatches] = useState([]);
+            const [cupMatches, setCupMatches] = useState([]);
+            const [players, setPlayers] = useState([]);
+            const [scorers, setScorers] = useState({});
+            const [loading, setLoading] = useState(true);
+
+            const championshipDates = [
+                '2026-01-19', '2026-01-26', '2026-02-02', '2026-02-09', '2026-02-23',
+                '2026-03-02', '2026-03-09', '2026-03-16', '2026-03-23', '2026-03-30',
+                '2026-04-13', '2026-04-20', '2026-04-27', '2026-05-04', '2026-05-11',
+                '2026-05-18', '2026-06-01', '2026-06-08', '2026-06-15'
+            ];
+            const cupDates = ['2026-06-22', '2026-06-29'];
+
+            // Charger les données depuis Firebase en temps réel
+            useEffect(() => {
+                const unsubscribeMatches = db.collection('championship').doc('matches').onSnapshot((doc) => {
+                    if (doc.exists) {
+                        setMatches(doc.data().data || []);
+                    } else {
+                        initializeData();
+                    }
+                });
+
+                const unsubscribeCup = db.collection('championship').doc('cup').onSnapshot((doc) => {
+                    if (doc.exists) {
+                        setCupMatches(doc.data().data || []);
+                    }
+                });
+
+                const unsubscribePlayers = db.collection('championship').doc('players').onSnapshot((doc) => {
+                    if (doc.exists) {
+                        setPlayers(doc.data().data || []);
+                    }
+                });
+
+                const unsubscribeScorers = db.collection('championship').doc('scorers').onSnapshot((doc) => {
+                    if (doc.exists) {
+                        setScorers(doc.data().data || {});
+                    }
+                });
+
+                setLoading(false);
+
+                return () => {
+                    unsubscribeMatches();
+                    unsubscribeCup();
+                    unsubscribePlayers();
+                    unsubscribeScorers();
+                };
+            }, []);
+
+            const initializeData = async () => {
+                const initialMatches = championshipDates.map((dateStr, idx) => ({
+                    journee: idx + 1,
+                    date: dateStr,
+                    scoreRouges: null,
+                    scoreBlancs: null,
+                    buteursRouges: [],
+                    buteursBlancs: []
+                }));
+
+                const initialCup = cupDates.map((dateStr, idx) => ({
+                    match: idx === 0 ? 'Aller' : 'Retour',
+                    date: dateStr,
+                    scoreRouges: null,
+                    scoreBlancs: null,
+                    buteursRouges: [],
+                    buteursBlancs: []
+                }));
+
+                await db.collection('championship').doc('matches').set({ data: initialMatches });
+                await db.collection('championship').doc('cup').set({ data: initialCup });
+                await db.collection('championship').doc('players').set({ data: [] });
+                await db.collection('championship').doc('scorers').set({ data: {} });
+            };
+
+            const saveData = async (newMatches, newCup, newPlayers, newScorers) => {
+                try {
+                    await db.collection('championship').doc('matches').set({ data: newMatches });
+                    await db.collection('championship').doc('cup').set({ data: newCup });
+                    await db.collection('championship').doc('players').set({ data: newPlayers });
+                    await db.collection('championship').doc('scorers').set({ data: newScorers });
+                } catch (error) {
+                    console.error('Erreur de sauvegarde:', error);
+                    alert('Erreur lors de la sauvegarde. Vérifiez votre connexion.');
+                }
+            };
+
+            const calculateTeamStats = () => {
+                const stats = {
+                    rouges: { points: 0, played: 0, wins: 0, draws: 0, losses: 0, goalsFor: 0, goalsAgainst: 0, winStreak: 0, currentStreak: 0 },
+                    blancs: { points: 0, played: 0, wins: 0, draws: 0, losses: 0, goalsFor: 0, goalsAgainst: 0, winStreak: 0, currentStreak: 0 }
+                };
+
+                let biggestWin = { team: '', score: '', diff: 0 };
+
+                matches.forEach((match) => {
+                    if (match.scoreRouges !== null && match.scoreBlancs !== null) {
+                        stats.rouges.played++;
+                        stats.blancs.played++;
+                        stats.rouges.goalsFor += match.scoreRouges;
+                        stats.rouges.goalsAgainst += match.scoreBlancs;
+                        stats.blancs.goalsFor += match.scoreBlancs;
+                        stats.blancs.goalsAgainst += match.scoreRouges;
+
+                        const diff = Math.abs(match.scoreRouges - match.scoreBlancs);
+
+                        if (match.scoreRouges > match.scoreBlancs) {
+                            stats.rouges.points += 4;
+                            stats.rouges.wins++;
+                            stats.blancs.points += 1;
+                            stats.blancs.losses++;
+                            stats.rouges.currentStreak++;
+                            stats.blancs.currentStreak = 0;
+                            stats.rouges.winStreak = Math.max(stats.rouges.winStreak, stats.rouges.currentStreak);
+
+                            if (diff > biggestWin.diff) {
+                                biggestWin = { team: 'Rouges', score: `${match.scoreRouges}-${match.scoreBlancs}`, diff };
+                            }
+                        } else if (match.scoreBlancs > match.scoreRouges) {
+                            stats.blancs.points += 4;
+                            stats.blancs.wins++;
+                            stats.rouges.points += 1;
+                            stats.rouges.losses++;
+                            stats.blancs.currentStreak++;
+                            stats.rouges.currentStreak = 0;
+                            stats.blancs.winStreak = Math.max(stats.blancs.winStreak, stats.blancs.currentStreak);
+
+                            if (diff > biggestWin.diff) {
+                                biggestWin = { team: 'Blancs', score: `${match.scoreBlancs}-${match.scoreRouges}`, diff };
+                            }
+                        } else {
+                            stats.rouges.points += 2;
+                            stats.blancs.points += 2;
+                            stats.rouges.draws++;
+                            stats.blancs.draws++;
+                            stats.rouges.currentStreak = 0;
+                            stats.blancs.currentStreak = 0;
+                        }
+                    }
+                });
+
+                return { stats, biggestWin };
+            };
+
+            const calculateTopScorers = () => {
+                const scorersList = [];
+                Object.entries(scorers).forEach(([name, goals]) => {
+                    scorersList.push({ name, goals });
+                });
+                return scorersList.sort((a, b) => b.goals - a.goals);
+            };
+
+            const calculateCupAggregate = () => {
+                if (cupMatches.length === 2 && cupMatches[0].scoreRouges !== null && cupMatches[1].scoreRouges !== null) {
+                    const totalRouges = cupMatches[0].scoreRouges + cupMatches[1].scoreRouges;
+                    const totalBlancs = cupMatches[0].scoreBlancs + cupMatches[1].scoreBlancs;
+                    return { totalRouges, totalBlancs };
+                }
+                return null;
+            };
+
+            const { stats, biggestWin } = calculateTeamStats();
+            const topScorers = calculateTopScorers();
+            const cupAggregate = calculateCupAggregate();
+
+            const lastMatch = matches.filter(m => m.scoreRouges !== null).slice(-1)[0];
+            const nextMatch = matches.find(m => m.scoreRouges === null);
+
+            if (loading) {
+                return <div className="flex items-center justify-center h-screen bg-green-900 text-white text-xl">⚽ Chargement...</div>;
+            }
+
+            return (
+                <div className="min-h-screen bg-gradient-to-br from-green-900 via-green-800 to-green-900 p-4">
+                    <div className="max-w-6xl mx-auto">
+                        <div className="bg-white rounded-lg shadow-xl p-6 mb-6">
+                            <div className="flex justify-between items-center flex-wrap gap-4">
+                                <div className="flex items-center gap-4">
+                                    <div className="flex gap-3">
+                                        <div className="w-12 h-12 bg-red-600 rounded-full border-4 border-white shadow-lg"></div>
+                                        <div className="w-12 h-12 bg-white rounded-full border-4 border-gray-800 shadow-lg"></div>
+                                    </div>
+                                    <div>
+                                        <h1 className="text-3xl font-bold text-gray-800 mb-1">🏆 Championnat 2026</h1>
+                                        <p className="text-gray-600">Rouges vs Blancs - Lundis Soir</p>
+                                    </div>
+                                </div>
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={() => setView('visitor')}
+                                        className={`flex items-center gap-2 px-4 py-2 rounded-lg transition ${view === 'visitor' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700'}`}
+                                    >
+                                        <Eye /> Visiteur
+                                    </button>
+                                    <button
+                                        onClick={() => setView('admin')}
+                                        className={`flex items-center gap-2 px-4 py-2 rounded-lg transition ${view === 'admin' ? 'bg-red-600 text-white' : 'bg-gray-200 text-gray-700'}`}
+                                    >
+                                        <Settings /> Admin
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        {view === 'visitor' ? (
+                            <VisitorView
+                                stats={stats}
+                                topScorers={topScorers}
+                                lastMatch={lastMatch}
+                                nextMatch={nextMatch}
+                                biggestWin={biggestWin}
+                                matches={matches}
+                                cupMatches={cupMatches}
+                                cupAggregate={cupAggregate}
+                            />
+                        ) : (
+                            <AdminView
+                                matches={matches}
+                                setMatches={setMatches}
+                                cupMatches={cupMatches}
+                                setCupMatches={setCupMatches}
+                                players={players}
+                                setPlayers={setPlayers}
+                                scorers={scorers}
+                                setScorers={setScorers}
+                                saveData={saveData}
+                                championshipDates={championshipDates}
+                                cupDates={cupDates}
+                            />
+                        )}
+                    </div>
+                </div>
+            );
+        };
+
+        const VisitorView = ({ stats, topScorers, lastMatch, nextMatch, biggestWin, matches, cupMatches, cupAggregate }) => {
+            return (
+                <div className="space-y-6">
+                    <div className="grid md:grid-cols-2 gap-6">
+                        {lastMatch && (
+                            <div className="bg-white rounded-lg shadow-lg p-6">
+                                <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
+                                    <Calendar /> Dernier Match - J{lastMatch.journee}
+                                </h2>
+                                <div className="text-center">
+                                    <p className="text-gray-600 mb-4">{new Date(lastMatch.date + 'T12:00:00').toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p>
+                                    <div className="flex justify-around items-center mb-4">
+                                        <div className="text-center">
+                                            <div className="text-4xl font-bold text-red-600">{lastMatch.scoreRouges}</div>
+                                            <div className="text-sm text-gray-600 mt-2">ROUGES</div>
+                                            {lastMatch.buteursRouges && lastMatch.buteursRouges.length > 0 && (
+                                                <div className="mt-3 text-left bg-red-50 p-2 rounded text-xs">
+                                                    <p className="font-semibold text-red-700 mb-1">Buteurs:</p>
+                                                    {lastMatch.buteursRouges.map((b, i) => (
+                                                        <p key={i} className="text-gray-700">⚽ {b}</p>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+                                        <div className="text-2xl font-bold text-gray-400">-</div>
+                                        <div className="text-center">
+                                            <div className="text-4xl font-bold text-blue-600">{lastMatch.scoreBlancs}</div>
+                                            <div className="text-sm text-gray-600 mt-2">BLANCS</div>
+                                            {lastMatch.buteursBlancs && lastMatch.buteursBlancs.length > 0 && (
+                                                <div className="mt-3 text-left bg-blue-50 p-2 rounded text-xs">
+                                                    <p className="font-semibold text-blue-700 mb-1">Buteurs:</p>
+                                                    {lastMatch.buteursBlancs.map((b, i) => (
+                                                        <p key={i} className="text-gray-700">⚽ {b}</p>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {nextMatch && (
+                            <div className="bg-white rounded-lg shadow-lg p-6">
+                                <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
+                                    <Calendar /> Prochain Match - J{nextMatch.journee}
+                                </h2>
+                                <div className="text-center py-8">
+                                    <p className="text-2xl font-bold text-gray-800 mb-4">
+                                        {new Date(nextMatch.date + 'T12:00:00').toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                                    </p>
+                                    <div className="flex justify-center items-center gap-8">
+                                        <div className="text-center">
+                                            <div className="w-16 h-16 bg-red-600 rounded-full mx-auto mb-2"></div>
+                                            <div className="font-semibold">ROUGES</div>
+                                        </div>
+                                        <div className="text-3xl font-bold text-gray-400">VS</div>
+                                        <div className="text-center">
+                                            <div className="w-16 h-16 bg-white rounded-full mx-auto mb-2 border-4 border-gray-800"></div>
+                                            <div className="font-semibold">BLANCS</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="bg-white rounded-lg shadow-lg p-6">
+                        <h2 className="text-2xl font-bold mb-4 flex items-center gap-2">
+                            <Trophy /> Classement du Championnat
+                        </h2>
+                        <div className="overflow-x-auto">
+                            <table className="w-full">
+                                <thead>
+                                    <tr className="border-b-2 border-gray-300">
+                                        <th className="text-left p-2">Équipe</th>
+                                        <th className="text-center p-2">J</th>
+                                        <th className="text-center p-2">V</th>
+                                        <th className="text-center p-2">N</th>
+                                        <th className="t
